@@ -41,6 +41,7 @@
     background:#0a0f1e; box-shadow:0 0 70px rgba(140,180,255,.18), inset 0 0 40px rgba(0,0,0,.8);
     display:flex; align-items:center; justify-content:center; overflow:hidden}
   #moonCanvas{width:100%; height:100%; display:block; border-radius:50%}
+  #loadingMsg{position:absolute; color:#4a5a86; font-size:13px; letter-spacing:.2em; text-transform:uppercase}
   #clock{color:var(--muted); font-size:clamp(13px,1.9vw,17px); text-align:center}
 
   footer{color:#7a8bb5; font-size:14px; text-align:center; padding:10px 0 18px; letter-spacing:.05em}
@@ -73,7 +74,8 @@
 
     <section class="stage">
       <div id="moonWrap">
-        <canvas id="moonCanvas" width="420" height="420"></canvas>
+        <canvas id="moonCanvas" width="512" height="512"></canvas>
+        <div id="loadingMsg">cargando textura lunar...</div>
       </div>
       <p id="clock">hora local: —</p>
     </section>
@@ -89,7 +91,7 @@
     </aside>
   </main>
 
-  <footer>Hecho con amor por <b>Margus20</b> <span class="heart">❤️</span></footer>
+  <footer>Hecho con <span class="heart">❤️</span> por <b>Margus20</b></footer>
 </div>
 
 <script>
@@ -132,12 +134,10 @@ function nextPhaseInfo(phase) {
   ];
   for (const p of phases) {
     if (p.target > phase + 0.001) {
-      const daysLeft = (p.target - phase) * SYNODIC_MONTH;
-      return { name: p.name, days: daysLeft };
+      return { name: p.name, days: (p.target - phase) * SYNODIC_MONTH };
     }
   }
-  const daysLeft = (1 - phase) * SYNODIC_MONTH;
-  return { name: "Luna Nueva", days: daysLeft };
+  return { name: "Luna Nueva", days: (1 - phase) * SYNODIC_MONTH };
 }
 function formatCountdown(days) {
   const d = Math.floor(days);
@@ -148,8 +148,7 @@ function formatCountdown(days) {
   return `${m}m`;
 }
 function distanceKm(phase) {
-  const anomaly = 2 * Math.PI * phase;
-  return Math.round(384400 + 25100 * Math.cos(anomaly));
+  return Math.round(384400 + 25100 * Math.cos(2 * Math.PI * phase));
 }
 function constellationForPhase(phase) {
   const degrees = (phase * 360 + 280) % 360;
@@ -183,153 +182,100 @@ function updateClock() {
 }
 
 /* ============================================================
-   DIBUJO DE LA LUNA EN EL CANVAS
+   DIBUJO DE LA LUNA CON TEXTURA REAL GUARDADA EN EL REPOSITORIO
    ============================================================ */
 const canvas = document.getElementById('moonCanvas');
 const ctx = canvas.getContext('2d');
 const W = canvas.width, H = canvas.height;
-const CX = W / 2, CY = H / 2, R = W / 2 - 10;
+const CX = W / 2, CY = H / 2, R = W / 2 - 4;
 
-// Cráteres procedurales (posición normalizada x,y entre -1 y 1, radio normalizado)
-const craters = [
-  { x: -0.35, y: -0.25, r: 0.18, name: "Mare Imbrium" },
-  { x: 0.15, y: -0.30, r: 0.15, name: "Mare Serenitatis" },
-  { x: 0.40, y: -0.10, r: 0.12, name: "Mare Crisium" },
-  { x: -0.10, y: 0.10, r: 0.22, name: "Mare Tranquillitatis" },
-  { x: 0.25, y: 0.20, r: 0.14, name: "Mare Fecunditatis" },
-  { x: -0.40, y: 0.30, r: 0.16, name: "Mare Nubium" },
-  { x: 0.05, y: 0.35, r: 0.13, name: "Mare Nectaris" },
-  { x: -0.20, y: -0.50, r: 0.10, name: "Mare Frigoris" },
-  { x: 0.30, y: -0.45, r: 0.09, name: "Mare Humboldtianum" },
-  { x: -0.50, y: 0.05, r: 0.11, name: "Oceanus Procellarum" },
-  { x: 0.00, y: -0.05, r: 0.08, name: "Sinus Medii" },
-  { x: -0.15, y: 0.45, r: 0.07, name: "Mare Humorum" },
-  { x: 0.45, y: 0.40, r: 0.06, name: "Mare Australe" },
-  { x: -0.55, y: -0.35, r: 0.05, name: "Mare Insularum" },
-  { x: 0.20, y: 0.50, r: 0.05, name: "Mare Smythii" }
-];
-// Cráteres pequeños de impacto
-const smallCraters = [];
-for (let i = 0; i < 80; i++) {
-  const angle = Math.random() * Math.PI * 2;
-  const rad = Math.random() * 0.85;
-  smallCraters.push({
-    x: Math.cos(angle) * rad,
-    y: Math.sin(angle) * rad,
-    r: 0.01 + Math.random() * 0.03
-  });
-}
+// Textura real (NASA / Solar System Scope) guardada en el repo como moon-texture.jpg
+const MOON_TEXTURE_URL = 'moon-texture.jpg';
+
+const moonImage = new Image();
+let textureLoaded = false;
+
+moonImage.onload = () => {
+  textureLoaded = true;
+  document.getElementById('loadingMsg').style.display = 'none';
+  drawMoon(moonPhase());
+};
+moonImage.onerror = () => {
+  document.getElementById('loadingMsg').textContent = 'textura local no encontrada';
+  drawMoonFallback(moonPhase());
+};
+moonImage.src = MOON_TEXTURE_URL;
 
 function drawMoon(phase) {
   ctx.clearRect(0, 0, W, H);
-  
-  // Fase: 0 = nueva, 0.5 = llena, 1 = nueva
-  // El terminador se mueve de derecha a izquierda en el hemisferio norte
-  // phase 0-0.5: creciente (iluminado a la derecha)
-  // phase 0.5-1: menguante (iluminado a la izquierda)
-  
+
   const isWaxing = phase < 0.5;
-  const halfPhase = isWaxing ? phase * 2 : (1 - phase) * 2; // 0 a 1 dentro de cada mitad
-  // halfPhase: 0 = nueva, 1 = llena (dentro de la mitad actual)
-  
-  // 1. Fondo oscuro de la Luna (parte no iluminada)
-  ctx.beginPath();
-  ctx.arc(CX, CY, R, 0, Math.PI * 2);
-  ctx.fillStyle = '#1a1f2e';
-  ctx.fill();
-  
-  // 2. Dibujar cráteres en la parte oscura (tenues, luz cenicienta)
-  drawCraters(0.15);
-  
-  // 3. Parte iluminada
+  const halfPhase = isWaxing ? phase * 2 : (1 - phase) * 2;
+
+  // 1. Disco base con la fotografía real recortada al hemisferio visible
   ctx.save();
   ctx.beginPath();
   ctx.arc(CX, CY, R, 0, Math.PI * 2);
   ctx.clip();
-  
-  // La forma iluminada depende de la fase
-  // Usamos una elipse para el terminador
-  const terminatorX = CX + (isWaxing ? 1 : -1) * R * Math.cos(halfPhase * Math.PI);
-  
-  ctx.beginPath();
-  if (halfPhase < 0.5) {
-    // Menos de medio iluminado: forma de "C" o "D" delgada
-    if (isWaxing) {
-      ctx.arc(CX, CY, R, -Math.PI/2, Math.PI/2, false);
-      ctx.ellipse(CX, CY, R * Math.cos(halfPhase * Math.PI), R, 0, Math.PI/2, -Math.PI/2, true);
-    } else {
-      ctx.arc(CX, CY, R, Math.PI/2, -Math.PI/2, false);
-      ctx.ellipse(CX, CY, R * Math.cos(halfPhase * Math.PI), R, 0, -Math.PI/2, Math.PI/2, true);
-    }
+
+  if (textureLoaded) {
+    // La textura equirectangular es 2:1; la cara frontal es la franja central cuadrada
+    const sx = moonImage.width / 4;
+    const sw = moonImage.width / 2;
+    ctx.drawImage(moonImage, sx, 0, sw, moonImage.height, 0, 0, W, H);
   } else {
-    // Más de medio iluminado
-    if (isWaxing) {
-      ctx.arc(CX, CY, R, -Math.PI/2, Math.PI/2, false);
-      ctx.ellipse(CX, CY, R * Math.abs(Math.cos(halfPhase * Math.PI)), R, 0, Math.PI/2, -Math.PI/2, false);
-    } else {
-      ctx.arc(CX, CY, R, Math.PI/2, -Math.PI/2, false);
-      ctx.ellipse(CX, CY, R * Math.abs(Math.cos(halfPhase * Math.PI)), R, 0, -Math.PI/2, Math.PI/2, false);
-    }
+    const grad = ctx.createRadialGradient(CX - R*0.3, CY - R*0.3, R*0.1, CX, CY, R);
+    grad.addColorStop(0, '#f0ead6');
+    grad.addColorStop(1, '#a89f85');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // 2. Capa de sombra según la fase (el terminador se mueve con la hora real)
+  ctx.beginPath();
+  const curve = Math.cos(halfPhase * Math.PI) * R;
+  if (isWaxing) {
+    ctx.moveTo(CX, CY - R);
+    ctx.arc(CX, CY, R, -Math.PI/2, Math.PI/2, true);
+    ctx.ellipse(CX, CY, Math.abs(curve), R, 0, Math.PI/2, -Math.PI/2, curve > 0 ? false : true);
+  } else {
+    ctx.moveTo(CX, CY - R);
+    ctx.arc(CX, CY, R, Math.PI/2, -Math.PI/2, true);
+    ctx.ellipse(CX, CY, Math.abs(curve), R, 0, -Math.PI/2, Math.PI/2, curve > 0 ? false : true);
   }
   ctx.closePath();
-  
-  // Gradiente de iluminación (más brillante en el centro del lado iluminado)
-  const grad = ctx.createRadialGradient(
-    CX + (isWaxing ? R*0.3 : -R*0.3), CY, R*0.1,
-    CX, CY, R
-  );
-  grad.addColorStop(0, '#fffef5');
-  grad.addColorStop(0.5, '#f0ead6');
-  grad.addColorStop(1, '#d4c9a8');
-  ctx.fillStyle = grad;
+  ctx.fillStyle = 'rgba(8, 12, 25, 0.92)';
   ctx.fill();
-  
-  // 4. Cráteres en la parte iluminada (visibles)
-  drawCraters(0.6);
-  
+
   ctx.restore();
-  
-  // 5. Borde suave y sombra exterior
+
+  // 3. Viñeta esférica para dar volumen 3D
+  const sphereShadow = ctx.createRadialGradient(CX - R*0.35, CY - R*0.35, R*0.1, CX, CY, R);
+  sphereShadow.addColorStop(0, 'rgba(255,255,255,0.08)');
+  sphereShadow.addColorStop(0.6, 'rgba(0,0,0,0)');
+  sphereShadow.addColorStop(1, 'rgba(0,0,0,0.55)');
   ctx.beginPath();
   ctx.arc(CX, CY, R, 0, Math.PI * 2);
-  ctx.strokeStyle = 'rgba(200,210,230,0.15)';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  
-  // Resplandor exterior
-  const glow = ctx.createRadialGradient(CX, CY, R*0.9, CX, CY, R*1.3);
-  glow.addColorStop(0, 'rgba(200,220,255,0.08)');
+  ctx.fillStyle = sphereShadow;
+  ctx.fill();
+
+  // 4. Resplandor exterior
+  const glow = ctx.createRadialGradient(CX, CY, R*0.95, CX, CY, R*1.4);
+  glow.addColorStop(0, 'rgba(200,220,255,0.12)');
   glow.addColorStop(1, 'rgba(200,220,255,0)');
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, W, H);
 }
 
-function drawCraters(opacity) {
-  // Mares lunares (manchas oscuras grandes)
-  craters.forEach(c => {
-    const px = CX + c.x * R;
-    const py = CY + c.y * R;
-    const pr = c.r * R;
-    ctx.beginPath();
-    ctx.arc(px, py, pr, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(80,85,100,${opacity * 0.5})`;
-    ctx.fill();
-  });
-  // Cráteres pequeños
-  smallCraters.forEach(c => {
-    const px = CX + c.x * R;
-    const py = CY + c.y * R;
-    const pr = c.r * R;
-    ctx.beginPath();
-    ctx.arc(px, py, pr, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(60,65,80,${opacity * 0.4})`;
-    ctx.fill();
-    // Borde del cráter (luz)
-    ctx.beginPath();
-    ctx.arc(px - pr*0.2, py - pr*0.2, pr*0.9, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(180,185,200,${opacity * 0.15})`;
-    ctx.fill();
-  });
+function drawMoonFallback(phase) {
+  ctx.clearRect(0, 0, W, H);
+  const grad = ctx.createRadialGradient(CX - R*0.3, CY - R*0.3, R*0.1, CX, CY, R);
+  grad.addColorStop(0, '#f0ead6');
+  grad.addColorStop(1, '#a89f85');
+  ctx.beginPath();
+  ctx.arc(CX, CY, R, 0, Math.PI * 2);
+  ctx.fillStyle = grad;
+  ctx.fill();
 }
 
 function updateAll() {
@@ -355,7 +301,7 @@ function updateAll() {
   document.getElementById('constellation').textContent = cons;
   document.getElementById('tip').textContent = tip;
 
-  drawMoon(phase);
+  if (textureLoaded) drawMoon(phase);
   updateClock();
 }
 

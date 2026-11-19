@@ -49,10 +49,19 @@
     background:rgba(13,18,36,.72); border:1px solid var(--line); border-radius:18px; padding:16px;
     display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:14px;
   }
-  .cal-card h3{margin:0 0 8px; font-size:16px; color:var(--accent); letter-spacing:.1em; text-transform:uppercase}
+  .cal-card h3{margin:0 0 8px; font-size:15px; color:var(--accent); letter-spacing:.1em; text-transform:uppercase}
   .cal-card p{margin:0 0 8px; font-size:clamp(14px,1.8vw,16px); line-height:1.5; color:var(--ink)}
-  .cal-card .meaning{color:var(--muted); font-style:italic; font-size:clamp(13px,1.6vw,15px)}
-  .cal-card .dates{color:#cfe0ff; font-size:clamp(13px,1.6vw,15px); margin-top:8px; padding-top:8px; border-top:1px dashed var(--line)}
+  
+  /* Nuevos estilos para nombre nativo + transliteración */
+  .cal-name { 
+    margin: 0 0 8px; font-size: clamp(18px, 2.8vw, 24px); font-weight: 700; color: var(--ink); 
+    line-height: 1.4; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; 
+  }
+  .cal-name .native { font-size: clamp(22px, 3.4vw, 30px); color: #ffffff; font-weight: 600; }
+  .cal-name .translit { color: var(--accent); font-weight: 600; }
+
+  .cal-card .meaning{color:var(--muted); font-style:italic; font-size:clamp(13px,1.6vw,15px); line-height:1.4}
+  .cal-card .dates{color:#cfe0ff; font-size:clamp(13px,1.6vw,15px); margin-top:8px; padding-top:8px; border-top:1px dashed var(--line); line-height:1.4}
 
   footer{color:#7a8bb5; font-size:14px; text-align:center; padding:10px 0 18px; letter-spacing:.05em}
   footer .heart{color:#ff6b8a; animation:pulse 1.5s ease-in-out infinite}
@@ -106,15 +115,15 @@
   <section class="calendars-block">
     <div class="cal-card">
       <h3>Calendario Hebreo</h3>
-      <p id="hebrewMonthName">Cargando...</p>
-      <p class="meaning" id="hebrewMeaning">Significado del mes</p>
-      <p class="dates" id="hebrewDates">Inicio y fin del mes lunar</p>
+      <p class="cal-name"><span class="translit" id="hebTranslit">—</span> <span class="native" dir="rtl" id="hebNative"></span></p>
+      <p class="meaning" id="hebMeaning">Significado del mes</p>
+      <p class="dates" id="hebDates">Inicio y fin del mes lunar</p>
     </div>
     <div class="cal-card">
-      <h3>Calendario Islámico (Árabe)</h3>
-      <p id="islamicMonthName">Cargando...</p>
-      <p class="meaning" id="islamicMeaning">Significado del mes</p>
-      <p class="dates" id="islamicDates">Inicio y fin del mes lunar</p>
+      <h3>Calendario Islámico</h3>
+      <p class="cal-name"><span class="translit" id="islTranslit">—</span> <span class="native" dir="rtl" id="islNative"></span></p>
+      <p class="meaning" id="islMeaning">Significado del mes</p>
+      <p class="dates" id="islDates">Inicio y fin del mes lunar</p>
     </div>
   </section>
 
@@ -182,73 +191,135 @@ function updateClock() {
 }
 
 /* ============================================================
-   2. CALENDARIOS LUNARES (Hebreo e Islámico)
+   2. CALENDARIOS LUNARES CALCULADOS (sin depender del navegador)
    ============================================================ */
-const hebrewMeanings = {
-  "Tishrei": "Comienzo (mes de las fiestas sagradas)",
-  "Jeshván": "Octavo mes (también llamado Marjeshván, 'gota de lluvia')",
-  "Kislev": "Confianza y esperanza",
-  "Tevet": "Bueno o benévolo",
-  "Shevat": "Golpe o vara (mes de los árboles)",
-  "Adar": "Gloria o fuerza (mes de la alegría)",
-  "Nisán": "Milagro o estandarte (primer mes del año religioso)",
-  "Iyar": "Resplandor o luz",
-  "Siván": "Estación o temporada",
-  "Tamuz": "Calor del verano",
-  "Av": "Padre (mes de la destrucción y la consolación)",
-  "Elul": "Búsqueda y preparación"
-};
+const HEB_MONTHS = [
+  {t:"Tishrei", n:"תִּשְׁרֵי", m:"Comienzo · mes del nuevo año y las fiestas sagradas"},
+  {t:"Jeshván", n:"חֶשְׁוָן", m:"Octavo mes · también llamado Marjeshván"},
+  {t:"Kislev", n:"כִּסְלֵו", m:"Confianza y esperanza · mes de Janucá"},
+  {t:"Tevet", n:"טֵבֵת", m:"Bueno · mes del ayuno del décimo"},
+  {t:"Shevat", n:"שְׁבָט", m:"Vara · mes de los árboles (Tu BiShvat)"},
+  {t:"Adar", n:"אֲדָר", m:"Gloria y fuerza · mes de la alegría (Purim)"},
+  {t:"Adar II", n:"אֲדָר בֵּית", m:"Segundo Adar · en años bisiestos"},
+  {t:"Nisán", n:"נִיסָן", m:"Milagro · primer mes del año religioso (Pésaj)"},
+  {t:"Iyar", n:"אִיָּר", m:"Resplandor · mes de la cuenta del Omer"},
+  {t:"Siván", n:"סִיוָן", m:"Estación · mes de Shavuot"},
+  {t:"Tamuz", n:"תַּמּוּז", m:"Calor del verano · mes del ayuno"},
+  {t:"Av", n:"אָב", m:"Padre · mes de la destrucción y la consolación"},
+  {t:"Elul", n:"אֱלוּל", m:"Búsqueda · mes de preparación y arrepentimiento"}
+];
 
-const islamicMeanings = {
-  "Muharram": "Sagrado o prohibido (uno de los cuatro meses sagrados)",
-  "Safar": "Vacío o amarillo (antiguamente las casas quedaban vacías por la guerra o el viaje)",
-  "Rabi al-Awwal": "Primavera primera",
-  "Rabi al-Thani": "Primavera segunda",
-  "Yumada al-Awwal": "Sequía primera (tierra seca)",
-  "Yumada al-Thani": "Sequía segunda",
-  "Rayab": "Respeto o reverencia (otro mes sagrado)",
-  "Shaban": "Separación (antiguamente las tribus se separaban para buscar agua)",
-  "Ramadán": "Calor abrasador o sequía (mes del ayuno)",
-  "Shawwal": "Elevación o aumento",
-  "Dhu al-Qadah": "El que se sienta (mes de descanso antes de la peregrinación)",
-  "Dhu al-Hijjah": "El de la peregrinación (mes del Hajj)"
-};
+const ISL_MONTHS = [
+  {t:"Muharram", n:"محرم", m:"Sagrado y prohibido · primer mes del año"},
+  {t:"Safar", n:"صفر", m:"El vacío · segundo mes"},
+  {t:"Rabi al-Awwal", n:"ربيع الأول", m:"Primera primavera · nacimiento del Profeta"},
+  {t:"Rabi al-Thani", n:"ربيع الآخر", m:"Segunda primavera"},
+  {t:"Yumada al-Ula", n:"جمادى الأولى", m:"La sequía primera"},
+  {t:"Yumada al-Akhira", n:"جمادى الآخرة", m:"La sequía segunda"},
+  {t:"Rayab", n:"رجب", m:"El respetado · uno de los meses sagrados"},
+  {t:"Shaabán", n:"شعبان", m:"La separación · mes previo al ayuno"},
+  {t:"Ramadán", n:"رمضان", m:"El calor abrasador · mes del ayuno"},
+  {t:"Shawwal", n:"شوال", m:"La elevación · mes de la fiesta del Eid"},
+  {t:"Dhu al-Qa'da", n:"ذو القعدة", m:"El que descansa · mes de reposo"},
+  {t:"Dhu al-Hiyya", n:"ذو الحجة", m:"El de la peregrinación · mes del Hajj"}
+];
+
+// --- Calendario hebreo (algoritmo con reglas de aplazamiento) ---
+const HEB_EPOCH = 347995.5;
+function hebElapsed(year) {
+  const monthsElapsed = Math.floor((235*year - 234)/19);
+  const parts = 12084 + 13753*monthsElapsed;
+  let day = monthsElapsed*29 + Math.floor(parts/25920);
+  if ((3*(day+1)) % 7 < 3) day++;
+  const moladDay = day % 7, moladParts = parts % 25920;
+  if (year % 4 === 2 || year % 4 === 1) {
+    if (moladDay > 2 || (moladDay === 2 && moladParts >= 16789)) { day++; if (year % 4 === 1 && moladDay === 2 && moladParts >= 16789) day++; }
+  } else {
+    if (moladDay > 1 || (moladDay === 1 && moladParts >= 12316)) { day++; if (year % 4 === 0 && moladDay === 1 && moladParts >= 12316) day++; }
+  }
+  return day;
+}
+function hebYearLen(year) { return hebElapsed(year+1) - hebElapsed(year); }
+function hebIsLeap(year) { return (((7*year)+1) % 19) < 7; }
+function hebMonthLen(year, month) {
+  const len = hebYearLen(year), leap = hebIsLeap(year);
+  if (month === 1) return 30;
+  if (month === 2) return (len % 65 === 30) ? 30 : 29;
+  if (month === 3) return (len % 65 === 28) ? 29 : 30;
+  if (month === 4) return 29;
+  if (month === 5) return 30;
+  if (month === 6) return leap ? 30 : 29;
+  if (month === 7) return leap ? 29 : 30;
+  if (month === 8) return 29;
+  if (month === 9) return 30;
+  if (month === 10) return 29;
+  if (month === 11) return 30;
+  if (month === 12) return leap ? 29 : 30;
+  if (month === 13) return 29;
+  return 29;
+}
+function jdnFromDate(d) {
+  let y = d.getFullYear(), m = d.getMonth()+1, day = d.getDate();
+  if (m <= 2) { y -= 1; m += 12; }
+  const a = Math.floor(y/100), b = 2 - a + Math.floor(a/4);
+  return Math.floor(365.25*(y+4716)) + Math.floor(30.6001*(m+1)) + day + b - 1524.5;
+}
+function hebMonthForDate(d) {
+  const jdn = jdnFromDate(d);
+  let year = Math.floor((jdn - HEB_EPOCH)/365.25) + 1;
+  while (hebElapsed(year) > (jdn - HEB_EPOCH)) year--;
+  while (hebElapsed(year+1) <= (jdn - HEB_EPOCH)) year++;
+  const leap = hebIsLeap(year);
+  const dayOfYear = jdn - (HEB_EPOCH + hebElapsed(year));
+  let acc = 0, monthIdx = 1;
+  const totalMonths = leap ? 13 : 12;
+  for (let m = 1; m <= totalMonths; m++) {
+    const L = hebMonthLen(year, m);
+    if (dayOfYear < acc + L) { monthIdx = m; break; }
+    acc += L;
+  }
+  let nameIdx;
+  if (!leap) { nameIdx = monthIdx; } 
+  else {
+    if (monthIdx <= 5) nameIdx = monthIdx;
+    else if (monthIdx === 6) nameIdx = 6;
+    else if (monthIdx === 7) nameIdx = 7;
+    else nameIdx = monthIdx;
+  }
+  return HEB_MONTHS[Math.min(nameIdx-1, HEB_MONTHS.length-1)];
+}
+
+// --- Calendario islámico (tabular / civil) ---
+function islMonthForDate(d) {
+  const jdn = Math.floor(jdnFromDate(d)) + 1;
+  let l = jdn - 1948440 + 10632;
+  let n = Math.floor((l-1)/10631);
+  l = l - 10631*n + 354;
+  const j = Math.floor((10985-l)/5316)*Math.floor((50*l)/17719) + Math.floor(l/5670)*Math.floor((43*l)/15238);
+  l = l - Math.floor((30-j)/15)*Math.floor((17719*j)/50) - Math.floor(j/16)*Math.floor((15238*j)/43) + 29;
+  const month = Math.floor((24*l)/709);
+  return ISL_MONTHS[Math.max(0, Math.min(month-1, ISL_MONTHS.length-1))];
+}
 
 function updateCalendars() {
   const now = new Date();
   const age = moonAge(now.getTime());
-  
-  // Fechas aproximadas basadas en el ciclo sinódico actual
-  const startDate = new Date(now.getTime() - (age * 86400000));
-  const endDate = new Date(now.getTime() + ((SYNODIC_MONTH - age) * 86400000));
-  const dateFmt = { day: 'numeric', month: 'long' };
-  const dateStr = `Del ${startDate.toLocaleDateString('es-VE', dateFmt)} al ${endDate.toLocaleDateString('es-VE', dateFmt)}`;
+  const startNewMoon = new Date(now.getTime() - age*86400000);
+  const endNewMoon = new Date(startNewMoon.getTime() + SYNODIC_MONTH*86400000);
+  const fmt = { day:'numeric', month:'long' };
+  const range = `Del ${startNewMoon.toLocaleDateString('es-VE', fmt)} al ${endNewMoon.toLocaleDateString('es-VE', fmt)} (hora de Caracas).`;
 
-  // Calendario Hebreo
-  try {
-    const hMonth = new Intl.DateTimeFormat('es-VE', { calendar: 'hebrew', month: 'long' }).format(now);
-    // Limpiar el nombre (a veces viene con "de" o el año, tomamos la primera palabra)
-    const hClean = hMonth.split(' ')[0].replace('de', '').trim();
-    // Capitalizar primera letra
-    const hName = hClean.charAt(0).toUpperCase() + hClean.slice(1);
-    document.getElementById('hebrewMonthName').textContent = hName;
-    document.getElementById('hebrewMeaning').textContent = hebrewMeanings[hName] || "Mes del ciclo lunar hebreo";
-  } catch(e) {
-    document.getElementById('hebrewMonthName').textContent = "Mes Hebreo Actual";
-  }
-  document.getElementById('hebrewDates').textContent = dateStr;
+  const hb = hebMonthForDate(now);
+  document.getElementById('hebTranslit').textContent = hb.t;
+  document.getElementById('hebNative').textContent = hb.n;
+  document.getElementById('hebMeaning').textContent = hb.m;
+  document.getElementById('hebDates').textContent = range;
 
-  // Calendario Islámico
-  try {
-    const iMonth = new Intl.DateTimeFormat('es-VE', { calendar: 'islamic-umalqura', month: 'long' }).format(now);
-    const iClean = iMonth.split(' ')[0].replace('de', '').trim();
-    const iName = iClean.charAt(0).toUpperCase() + iClean.slice(1);
-    document.getElementById('islamicMonthName').textContent = iName;
-    document.getElementById('islamicMeaning').textContent = islamicMeanings[iName] || "Mes del ciclo lunar islámico";
-  } catch(e) {
-    document.getElementById('islamicMonthName').textContent = "Mes Islámico Actual";
-  }
-  document.getElementById('islamicDates').textContent = dateStr;
+  const is = islMonthForDate(now);
+  document.getElementById('islTranslit').textContent = is.t;
+  document.getElementById('islNative').textContent = is.n;
+  document.getElementById('islMeaning').textContent = is.m;
+  document.getElementById('islDates').textContent = range;
 }
 
 /* ============================================================
@@ -342,67 +413,4 @@ function drawMoon(phase) {
     const sx = moonImage.width / 4, sw = moonImage.width / 2;
     ctx.drawImage(moonImage, sx, 0, sw, moonImage.height, 0, 0, W, H);
   } else {
-    const grad = ctx.createRadialGradient(CX - R*0.3, CY - R*0.3, R*0.1, CX, CY, R);
-    grad.addColorStop(0, '#f0ead6'); grad.addColorStop(1, '#a89f85');
-    ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
-  }
-
-  ctx.beginPath();
-  const curve = Math.cos(halfPhase * Math.PI) * R;
-  if (isWaxing) {
-    ctx.moveTo(CX, CY - R); ctx.arc(CX, CY, R, -Math.PI/2, Math.PI/2, true);
-    ctx.ellipse(CX, CY, Math.abs(curve), R, 0, Math.PI/2, -Math.PI/2, curve > 0 ? false : true);
-  } else {
-    ctx.moveTo(CX, CY - R); ctx.arc(CX, CY, R, Math.PI/2, -Math.PI/2, true);
-    ctx.ellipse(CX, CY, Math.abs(curve), R, 0, -Math.PI/2, Math.PI/2, curve > 0 ? false : true);
-  }
-  ctx.closePath(); ctx.fillStyle = 'rgba(8, 12, 25, 0.92)'; ctx.fill();
-  ctx.restore();
-
-  const sh = ctx.createRadialGradient(CX - R*0.35, CY - R*0.35, R*0.1, CX, CY, R);
-  sh.addColorStop(0, 'rgba(255,255,255,0.08)'); sh.addColorStop(0.6, 'rgba(0,0,0,0)'); sh.addColorStop(1, 'rgba(0,0,0,0.55)');
-  ctx.beginPath(); ctx.arc(CX, CY, R, 0, Math.PI * 2); ctx.fillStyle = sh; ctx.fill();
-
-  const glow = ctx.createRadialGradient(CX, CY, R*0.95, CX, CY, R*1.4);
-  glow.addColorStop(0, 'rgba(200,220,255,0.12)'); glow.addColorStop(1, 'rgba(200,220,255,0)');
-  ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
-}
-
-/* ============================================================
-   5. BUCLE DE ACTUALIZACIÓN
-   ============================================================ */
-let lastRiseCalc = 0;
-
-function updateAll() {
-  const now = Date.now();
-  const age = moonAge(now), phase = moonPhase(now), illum = illumination(phase);
-  const name = phaseName(phase), tr = trend(phase), next = nextPhaseInfo(phase);
-
-  document.getElementById('phaseName').textContent = name;
-  document.getElementById('illumTag').textContent = illum.toFixed(1) + '% iluminada · ' + tr;
-  document.getElementById('age').textContent = age.toFixed(2) + ' días';
-  document.getElementById('trend').textContent = tr;
-  document.getElementById('next').textContent = next.name;
-  document.getElementById('countdown').textContent = formatCountdown(next.days);
-  document.getElementById('illum').textContent = illum.toFixed(1) + '%';
-  document.getElementById('dist').textContent = distanceKm(phase).toLocaleString('es') + ' km';
-  document.getElementById('constellation').textContent = constellationForPhase(phase);
-  document.getElementById('tip').textContent = observationTip(phase);
-
-  if (textureLoaded) drawMoon(phase);
-  updateClock();
-  updateCalendars();
-
-  if (now - lastRiseCalc > 5 * 60000 || lastRiseCalc === 0) {
-    const rs = computeRiseSet();
-    document.getElementById('rise').textContent = rs.rise;
-    document.getElementById('set').textContent = rs.set;
-    lastRiseCalc = now;
-  }
-}
-
-updateAll();
-setInterval(updateAll, 1000);
-</script>
-</body>
-</html>
+    const grad 

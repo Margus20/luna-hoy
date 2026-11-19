@@ -41,7 +41,6 @@
     background:#0a0f1e; box-shadow:0 0 70px rgba(140,180,255,.18), inset 0 0 40px rgba(0,0,0,.8);
     display:flex; align-items:center; justify-content:center; overflow:hidden}
   #moonCanvas{width:100%; height:100%; display:block}
-  #moonWrap .placeholder{color:#4a5a86; font-size:13px; letter-spacing:.2em; text-transform:uppercase}
   #clock{color:var(--muted); font-size:clamp(13px,1.9vw,17px); text-align:center}
 
   footer{color:#5f7099; font-size:13px; text-align:center; padding:6px 0 14px}
@@ -58,14 +57,14 @@
   <header class="top">
     <p class="kicker">Luna Hoy · observación en vivo</p>
     <h1 id="phaseName">Fase lunar</h1>
-    <p id="illumTag">aquí irá el porcentaje real de iluminación</p>
+    <p id="illumTag">calculando...</p>
   </header>
 
   <main class="grid">
     <aside class="panel" id="left">
       <h2>Ciclo</h2>
       <div class="slot"><b>Edad lunar</b><span id="age">—</span></div>
-      <div class="slot"><b>Luz creciente o menguante</b><span id="trend">—</span></div>
+      <div class="slot"><b>Luz</b><span id="trend">—</span></div>
       <div class="slot"><b>Próxima fase</b><span id="next">—</span></div>
       <div class="slot"><b>Faltan</b><span id="countdown">—</span></div>
     </aside>
@@ -73,26 +72,178 @@
     <section class="stage">
       <div id="moonWrap">
         <canvas id="moonCanvas" width="420" height="420"></canvas>
-        <div class="placeholder" id="placeholder">maqueta de la luna en vivo</div>
       </div>
       <p id="clock">hora local: —</p>
     </section>
 
     <aside class="panel" id="right">
       <h2>Cielo</h2>
+      <div class="slot"><b>Iluminación</b><span id="illum">—</span></div>
       <div class="slot"><b>Distancia</b><span id="dist">—</span></div>
       <div class="slot"><b>Salida</b><span id="rise">—</span></div>
       <div class="slot"><b>Puesta</b><span id="set">—</span></div>
       <div class="slot"><b>Constelación</b><span id="constellation">—</span></div>
-      <div class="slot"><b>Tip de observación</b><span id="tip">—</span></div>
+      <div class="slot"><b>Tip</b><span id="tip">—</span></div>
     </aside>
   </main>
 
-  <footer>Paso 1 · maqueta vacía. Todavía no calcula nada: solo estamos montando la casa.</footer>
+  <footer>Paso 2 · motor astronómico activo. Calcula la fase real con matemáticas, sin internet.</footer>
 </div>
 
 <script>
-// == Aquí empieza el trabajo en el Paso 2: motor astronómico de la fase lunar ==
+/* ============================================================
+   MOTOR ASTRONÓMICO DE FASE LUNAR
+   Basado en la época J2000 y el ciclo sinódico medio.
+   Funciona 100% offline, sin APIs externas.
+   ============================================================ */
+
+const SYNODIC_MONTH = 29.530588853; // días del ciclo sinódico medio
+// Luna nueva de referencia: 6 de enero de 2000, 18:14 UTC (JD 2451550.1)
+const REF_NEW_MOON = Date.UTC(2000, 0, 6, 18, 14, 0);
+
+function moonAge(now = Date.now()) {
+  const daysSinceRef = (now - REF_NEW_MOON) / 86400000;
+  let age = daysSinceRef % SYNODIC_MONTH;
+  if (age < 0) age += SYNODIC_MONTH;
+  return age;
+}
+
+function moonPhase(now = Date.now()) {
+  return moonAge(now) / SYNODIC_MONTH; // 0 a 1
+}
+
+function illumination(phase) {
+  // 0% en luna nueva, 100% en luna llena
+  return (1 - Math.cos(2 * Math.PI * phase)) / 2 * 100;
+}
+
+function phaseName(phase) {
+  // 8 fases principales con sus rangos
+  if (phase < 0.03125 || phase >= 0.96875) return "Luna Nueva";
+  if (phase < 0.21875) return "Creciente Córnica";
+  if (phase < 0.28125) return "Cuarto Creciente";
+  if (phase < 0.46875) return "Gibosa Creciente";
+  if (phase < 0.53125) return "Luna Llena";
+  if (phase < 0.71875) return "Gibosa Menguante";
+  if (phase < 0.78125) return "Cuarto Menguante";
+  if (phase < 0.96875) return "Menguante Córnica";
+  return "Luna Nueva";
+}
+
+function trend(phase) {
+  if (phase < 0.5) return "Creciente 🌒";
+  if (phase > 0.5) return "Menguante 🌖";
+  return "Llena 🌕";
+}
+
+function nextPhaseInfo(phase) {
+  const phases = [
+    { name: "Luna Nueva", target: 0 },
+    { name: "Cuarto Creciente", target: 0.25 },
+    { name: "Luna Llena", target: 0.5 },
+    { name: "Cuarto Menguante", target: 0.75 }
+  ];
+  // buscar la siguiente fase
+  for (const p of phases) {
+    if (p.target > phase + 0.001) {
+      const daysLeft = (p.target - phase) * SYNODIC_MONTH;
+      return { name: p.name, days: daysLeft };
+    }
+  }
+  // si ya pasamos todas, la siguiente es Luna Nueva del próximo ciclo
+  const daysLeft = (1 - phase) * SYNODIC_MONTH;
+  return { name: "Luna Nueva", days: daysLeft };
+}
+
+function formatCountdown(days) {
+  const totalHours = days * 24;
+  const d = Math.floor(days);
+  const h = Math.floor((days - d) * 24);
+  const m = Math.floor(((days - d) * 24 - h) * 60);
+  if (d > 0) return `${d}d ${h}h ${m}m`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+function distanceKm(phase) {
+  // distancia aproximada varía entre 356.500 y 406.700 km
+  // usamos una variación sinusoidal simple basada en anomalía media
+  const anomaly = 2 * Math.PI * phase;
+  const meanDist = 384400;
+  const variation = 25100 * Math.cos(anomaly);
+  return Math.round(meanDist + variation);
+}
+
+function constellationForPhase(phase) {
+  // aproximación: la Luna avanza ~13° por día por la eclíptica
+  // referencia: en luna nueva del 6/ene/2000 estaba en Capricornio
+  const degrees = (phase * 360 + 280) % 360;
+  const signs = [
+    { name: "Capricornio ♑", min: 270 },
+    { name: "Acuario ♒", min: 300 },
+    { name: "Piscis ♓", min: 330 },
+    { name: "Aries ♈", min: 0 },
+    { name: "Tauro ♉", min: 30 },
+    { name: "Géminis ♊", min: 60 },
+    { name: "Cáncer ♋", min: 90 },
+    { name: "Leo ♌", min: 120 },
+    { name: "Virgo ♍", min: 150 },
+    { name: "Libra ♎", min: 180 },
+    { name: "Escorpio ♏", min: 210 },
+    { name: "Sagitario ♐", min: 240 }
+  ];
+  for (let i = signs.length - 1; i >= 0; i--) {
+    if (degrees >= signs[i].min) return signs[i].name;
+  }
+  return signs[0].name;
+}
+
+function observationTip(phase, illum) {
+  if (phase < 0.03 || phase > 0.97) return "Cielo oscuro ideal para estrellas y Vía Láctea.";
+  if (phase < 0.25) return "Buen momento para ver cráteres cerca del terminador.";
+  if (phase < 0.5) return "Cuarto creciente: sombras largas, gran detalle lunar.";
+  if (phase < 0.53) return "¡Luna llena! Perfecta para fotografía, pero poco relieve.";
+  if (phase < 0.75) return "Gibosa menguante: buena para observar mares lunares.";
+  if (phase < 0.78) return "Cuarto menguante: salida cerca de la medianoche.";
+  return "Menguante: mejor observación antes del amanecer.";
+}
+
+function updateClock() {
+  const now = new Date();
+  const opts = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+                 hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
+  document.getElementById('clock').textContent = 'hora local: ' + now.toLocaleDateString('es-VE', opts);
+}
+
+function updateAll() {
+  const now = Date.now();
+  const age = moonAge(now);
+  const phase = moonPhase(now);
+  const illum = illumination(phase);
+  const name = phaseName(phase);
+  const tr = trend(phase);
+  const next = nextPhaseInfo(phase);
+  const dist = distanceKm(phase);
+  const cons = constellationForPhase(phase);
+  const tip = observationTip(phase, illum);
+
+  document.getElementById('phaseName').textContent = name;
+  document.getElementById('illumTag').textContent = illum.toFixed(1) + '% iluminada · ' + tr;
+  document.getElementById('age').textContent = age.toFixed(2) + ' días';
+  document.getElementById('trend').textContent = tr;
+  document.getElementById('next').textContent = next.name;
+  document.getElementById('countdown').textContent = formatCountdown(next.days);
+  document.getElementById('illum').textContent = illum.toFixed(1) + '%';
+  document.getElementById('dist').textContent = dist.toLocaleString('es') + ' km';
+  document.getElementById('constellation').textContent = cons;
+  document.getElementById('tip').textContent = tip;
+
+  updateClock();
+}
+
+// actualizar cada segundo
+updateAll();
+setInterval(updateAll, 1000);
 </script>
 </body>
 </html>

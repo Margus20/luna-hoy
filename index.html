@@ -43,6 +43,16 @@
   #moonCanvas{width:100%; height:100%; display:block; border-radius:50%}
   #loadingMsg{position:absolute; color:#4a5a86; font-size:13px; letter-spacing:.2em; text-transform:uppercase}
   #clock{color:var(--muted); font-size:clamp(13px,1.9vw,17px); text-align:center}
+  .note{color:#5f7099; font-size:12px; text-align:center; margin-top:-6px}
+
+  .calendars-block{
+    background:rgba(13,18,36,.72); border:1px solid var(--line); border-radius:18px; padding:16px;
+    display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:14px;
+  }
+  .cal-card h3{margin:0 0 8px; font-size:16px; color:var(--accent); letter-spacing:.1em; text-transform:uppercase}
+  .cal-card p{margin:0 0 8px; font-size:clamp(14px,1.8vw,16px); line-height:1.5; color:var(--ink)}
+  .cal-card .meaning{color:var(--muted); font-style:italic; font-size:clamp(13px,1.6vw,15px)}
+  .cal-card .dates{color:#cfe0ff; font-size:clamp(13px,1.6vw,15px); margin-top:8px; padding-top:8px; border-top:1px dashed var(--line)}
 
   footer{color:#7a8bb5; font-size:14px; text-align:center; padding:10px 0 18px; letter-spacing:.05em}
   footer .heart{color:#ff6b8a; animation:pulse 1.5s ease-in-out infinite}
@@ -51,6 +61,7 @@
   @media (max-width:820px){
     main.grid{grid-template-columns:1fr 1fr}
     section.stage{grid-column:1/-1; order:-1}
+    .calendars-block{grid-template-columns:1fr}
   }
 </style>
 </head>
@@ -78,6 +89,7 @@
         <div id="loadingMsg">cargando textura lunar...</div>
       </div>
       <p id="clock">hora local: —</p>
+      <p class="note">Caracas · 10.5° N · salida y puesta aproximadas</p>
     </section>
 
     <aside class="panel" id="right">
@@ -91,19 +103,33 @@
     </aside>
   </main>
 
+  <section class="calendars-block">
+    <div class="cal-card">
+      <h3>Calendario Hebreo</h3>
+      <p id="hebrewMonthName">Cargando...</p>
+      <p class="meaning" id="hebrewMeaning">Significado del mes</p>
+      <p class="dates" id="hebrewDates">Inicio y fin del mes lunar</p>
+    </div>
+    <div class="cal-card">
+      <h3>Calendario Islámico (Árabe)</h3>
+      <p id="islamicMonthName">Cargando...</p>
+      <p class="meaning" id="islamicMeaning">Significado del mes</p>
+      <p class="dates" id="islamicDates">Inicio y fin del mes lunar</p>
+    </div>
+  </section>
+
   <footer>Hecho con <span class="heart">❤️</span> por <b>Margus20</b></footer>
 </div>
 
 <script>
 /* ============================================================
-   MOTOR ASTRONÓMICO DE FASE LUNAR
+   1. MOTOR DE FASES Y DATOS BÁSICOS
    ============================================================ */
 const SYNODIC_MONTH = 29.530588853;
 const REF_NEW_MOON = Date.UTC(2000, 0, 6, 18, 14, 0);
 
 function moonAge(now = Date.now()) {
-  const daysSinceRef = (now - REF_NEW_MOON) / 86400000;
-  let age = daysSinceRef % SYNODIC_MONTH;
+  let age = ((now - REF_NEW_MOON) / 86400000) % SYNODIC_MONTH;
   if (age < 0) age += SYNODIC_MONTH;
   return age;
 }
@@ -120,51 +146,26 @@ function phaseName(phase) {
   if (phase < 0.78125) return "Cuarto Menguante";
   return "Menguante Córnica";
 }
-function trend(phase) {
-  if (phase < 0.5) return "Creciente 🌒";
-  if (phase > 0.5) return "Menguante 🌖";
-  return "Llena 🌕";
-}
+function trend(phase) { return phase < 0.5 ? "Creciente 🌒" : (phase > 0.5 ? "Menguante 🌖" : "Llena 🌕"); }
+
 function nextPhaseInfo(phase) {
-  const phases = [
-    { name: "Luna Nueva", target: 0 },
-    { name: "Cuarto Creciente", target: 0.25 },
-    { name: "Luna Llena", target: 0.5 },
-    { name: "Cuarto Menguante", target: 0.75 }
-  ];
-  for (const p of phases) {
-    if (p.target > phase + 0.001) {
-      return { name: p.name, days: (p.target - phase) * SYNODIC_MONTH };
-    }
-  }
+  const phases = [{name:"Luna Nueva",t:0},{name:"Cuarto Creciente",t:0.25},{name:"Luna Llena",t:0.5},{name:"Cuarto Menguante",t:0.75}];
+  for (const p of phases) if (p.t > phase + 0.001) return { name: p.name, days: (p.t - phase) * SYNODIC_MONTH };
   return { name: "Luna Nueva", days: (1 - phase) * SYNODIC_MONTH };
 }
 function formatCountdown(days) {
-  const d = Math.floor(days);
-  const h = Math.floor((days - d) * 24);
-  const m = Math.floor(((days - d) * 24 - h) * 60);
-  if (d > 0) return `${d}d ${h}h ${m}m`;
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
+  const d = Math.floor(days), h = Math.floor((days - d) * 24), m = Math.floor(((days - d) * 24 - h) * 60);
+  if (d > 0) return `${d}d ${h}h ${m}m`; if (h > 0) return `${h}h ${m}m`; return `${m}m`;
 }
-function distanceKm(phase) {
-  return Math.round(384400 + 25100 * Math.cos(2 * Math.PI * phase));
-}
+function distanceKm(phase) { return Math.round(384400 + 25100 * Math.cos(2 * Math.PI * phase)); }
+
 function constellationForPhase(phase) {
   const degrees = (phase * 360 + 280) % 360;
-  const signs = [
-    { name: "Capricornio ♑", min: 270 }, { name: "Acuario ♒", min: 300 },
-    { name: "Piscis ♓", min: 330 }, { name: "Aries ♈", min: 0 },
-    { name: "Tauro ♉", min: 30 }, { name: "Géminis ♊", min: 60 },
-    { name: "Cáncer ♋", min: 90 }, { name: "Leo ♌", min: 120 },
-    { name: "Virgo ♍", min: 150 }, { name: "Libra ♎", min: 180 },
-    { name: "Escorpio ♏", min: 210 }, { name: "Sagitario ♐", min: 240 }
-  ];
-  for (let i = signs.length - 1; i >= 0; i--) {
-    if (degrees >= signs[i].min) return signs[i].name;
-  }
+  const signs = [{name:"Capricornio ♑",min:270},{name:"Acuario ♒",min:300},{name:"Piscis ♓",min:330},{name:"Aries ♈",min:0},{name:"Tauro ♉",min:30},{name:"Géminis ♊",min:60},{name:"Cáncer ♋",min:90},{name:"Leo ♌",min:120},{name:"Virgo ♍",min:150},{name:"Libra ♎",min:180},{name:"Escorpio ♏",min:210},{name:"Sagitario ♐",min:240}];
+  for (let i = signs.length - 1; i >= 0; i--) if (degrees >= signs[i].min) return signs[i].name;
   return signs[0].name;
 }
+
 function observationTip(phase) {
   if (phase < 0.03 || phase > 0.97) return "Cielo oscuro ideal para estrellas y Vía Láctea.";
   if (phase < 0.25) return "Buen momento para ver cráteres cerca del terminador.";
@@ -174,24 +175,148 @@ function observationTip(phase) {
   if (phase < 0.78) return "Cuarto menguante: salida cerca de la medianoche.";
   return "Menguante: mejor observación antes del amanecer.";
 }
+
 function updateClock() {
-  const now = new Date();
-  const opts = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-                 hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
-  document.getElementById('clock').textContent = 'hora local: ' + now.toLocaleDateString('es-VE', opts);
+  const opts = { weekday:'long', year:'numeric', month:'long', day:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false };
+  document.getElementById('clock').textContent = 'hora local: ' + new Date().toLocaleDateString('es-VE', opts);
 }
 
 /* ============================================================
-   DIBUJO DE LA LUNA CON TEXTURA REAL GUARDADA EN EL REPOSITORIO
+   2. CALENDARIOS LUNARES (Hebreo e Islámico)
+   ============================================================ */
+const hebrewMeanings = {
+  "Tishrei": "Comienzo (mes de las fiestas sagradas)",
+  "Jeshván": "Octavo mes (también llamado Marjeshván, 'gota de lluvia')",
+  "Kislev": "Confianza y esperanza",
+  "Tevet": "Bueno o benévolo",
+  "Shevat": "Golpe o vara (mes de los árboles)",
+  "Adar": "Gloria o fuerza (mes de la alegría)",
+  "Nisán": "Milagro o estandarte (primer mes del año religioso)",
+  "Iyar": "Resplandor o luz",
+  "Siván": "Estación o temporada",
+  "Tamuz": "Calor del verano",
+  "Av": "Padre (mes de la destrucción y la consolación)",
+  "Elul": "Búsqueda y preparación"
+};
+
+const islamicMeanings = {
+  "Muharram": "Sagrado o prohibido (uno de los cuatro meses sagrados)",
+  "Safar": "Vacío o amarillo (antiguamente las casas quedaban vacías por la guerra o el viaje)",
+  "Rabi al-Awwal": "Primavera primera",
+  "Rabi al-Thani": "Primavera segunda",
+  "Yumada al-Awwal": "Sequía primera (tierra seca)",
+  "Yumada al-Thani": "Sequía segunda",
+  "Rayab": "Respeto o reverencia (otro mes sagrado)",
+  "Shaban": "Separación (antiguamente las tribus se separaban para buscar agua)",
+  "Ramadán": "Calor abrasador o sequía (mes del ayuno)",
+  "Shawwal": "Elevación o aumento",
+  "Dhu al-Qadah": "El que se sienta (mes de descanso antes de la peregrinación)",
+  "Dhu al-Hijjah": "El de la peregrinación (mes del Hajj)"
+};
+
+function updateCalendars() {
+  const now = new Date();
+  const age = moonAge(now.getTime());
+  
+  // Fechas aproximadas basadas en el ciclo sinódico actual
+  const startDate = new Date(now.getTime() - (age * 86400000));
+  const endDate = new Date(now.getTime() + ((SYNODIC_MONTH - age) * 86400000));
+  const dateFmt = { day: 'numeric', month: 'long' };
+  const dateStr = `Del ${startDate.toLocaleDateString('es-VE', dateFmt)} al ${endDate.toLocaleDateString('es-VE', dateFmt)}`;
+
+  // Calendario Hebreo
+  try {
+    const hMonth = new Intl.DateTimeFormat('es-VE', { calendar: 'hebrew', month: 'long' }).format(now);
+    // Limpiar el nombre (a veces viene con "de" o el año, tomamos la primera palabra)
+    const hClean = hMonth.split(' ')[0].replace('de', '').trim();
+    // Capitalizar primera letra
+    const hName = hClean.charAt(0).toUpperCase() + hClean.slice(1);
+    document.getElementById('hebrewMonthName').textContent = hName;
+    document.getElementById('hebrewMeaning').textContent = hebrewMeanings[hName] || "Mes del ciclo lunar hebreo";
+  } catch(e) {
+    document.getElementById('hebrewMonthName').textContent = "Mes Hebreo Actual";
+  }
+  document.getElementById('hebrewDates').textContent = dateStr;
+
+  // Calendario Islámico
+  try {
+    const iMonth = new Intl.DateTimeFormat('es-VE', { calendar: 'islamic-umalqura', month: 'long' }).format(now);
+    const iClean = iMonth.split(' ')[0].replace('de', '').trim();
+    const iName = iClean.charAt(0).toUpperCase() + iClean.slice(1);
+    document.getElementById('islamicMonthName').textContent = iName;
+    document.getElementById('islamicMeaning').textContent = islamicMeanings[iName] || "Mes del ciclo lunar islámico";
+  } catch(e) {
+    document.getElementById('islamicMonthName').textContent = "Mes Islámico Actual";
+  }
+  document.getElementById('islamicDates').textContent = dateStr;
+}
+
+/* ============================================================
+   3. MOTOR DE POSICIÓN LUNAR Y SALIDA/PUESTA (Caracas)
+   ============================================================ */
+const D2R = Math.PI / 180, R2D = 180 / Math.PI;
+const sin = x => Math.sin(x * D2R), cos = x => Math.cos(x * D2R), tan = x => Math.tan(x * D2R);
+const asin = x => Math.asin(Math.max(-1, Math.min(1, x))) * R2D;
+const atan2 = (y, x) => { let a = Math.atan2(y, x) * R2D; return a < 0 ? a + 360 : a; };
+
+function jdFromDate(ms) { return ms / 86400000 + 2440587.5; }
+
+function moonEcliptic(JD) {
+  const T = (JD - 2451545.0) / 36525;
+  const L0 = 218.3164477 + 481267.88123421*T - 0.0015786*T*T + T*T*T/538841;
+  const D  = 297.8501921 + 445267.1114034*T - 0.0018819*T*T + T*T*T/545868;
+  const M  = 357.5291092 + 35999.0503402*T - 0.0001536*T*T + T*T*T/24490000;
+  const M1 = 134.9633964 + 477198.8675055*T + 0.0087414*T*T + T*T*T/69694;
+  const F  = 93.2720950 + 483202.0175233*T - 0.0036539*T*T - T*T*T/3526000;
+  const lam = L0 + 6.288774*sin(M1) + 1.274027*sin(2*D-M1) + 0.658314*sin(2*D) + 0.213618*sin(2*M1) - 0.185116*sin(M) - 0.114332*sin(2*F) + 0.058793*sin(2*D-M1-M) + 0.057066*sin(2*D-M1+M) + 0.053322*sin(2*D+M1) + 0.045758*sin(2*D-M) + 0.040923*sin(M1-M) + 0.03472*sin(M1+M) + 0.030383*sin(2*D+M1-M) - 0.015327*sin(D-M1);
+  const bet = 5.128122*sin(F) + 0.2806028*sin(M1+F) + 0.277694*sin(M1-F) + 0.173237*sin(2*D-F) + 0.055413*sin(2*D+M1-F) + 0.046271*sin(2*D-M1+F) + 0.032573*sin(2*F+M1) + 0.017198*sin(2*D+M1) - 0.009262*sin(2*D-F) + 0.008821*sin(2*D+M1-F);
+  const eps = 23.439291 - 0.0130042*T;
+  const ra = atan2( sin(lam)*cos(eps) - tan(bet)*sin(eps), cos(lam) );
+  const dec = asin( sin(bet)*cos(eps) + cos(bet)*sin(eps)*sin(lam) );
+  return { ra, dec };
+}
+
+function gmst(JD) {
+  const T = (JD - 2451545.0) / 36525;
+  let g = 280.46061837 + 360.98564736629*(JD - 2451545.0) + 0.000387933*T*T - T*T*T/38710000;
+  return ((g % 360) + 360) % 360;
+}
+
+const LAT = 10.5009, LON = -66.9046; // Coordenadas de Caracas
+
+function moonAltitude(ms) {
+  const JD = jdFromDate(ms);
+  const { ra, dec } = moonEcliptic(JD);
+  const lst = (gmst(JD) + LON) % 360;
+  let H = lst - ra; if (H > 180) H -= 360; if (H < -180) H += 360;
+  return asin( sin(LAT)*sin(dec) + cos(LAT)*cos(dec)*cos(H) );
+}
+
+function computeRiseSet() {
+  const midnight = new Date(); midnight.setHours(0,0,0,0);
+  const start = midnight.getTime(), end = start + 86400000;
+  const h0 = -0.833, step = 5 * 60000;
+  let rise = null, set = null, prev = moonAltitude(start);
+  for (let t = start + step; t <= end; t += step) {
+    const cur = moonAltitude(t);
+    if (rise === null && prev < h0 && cur >= h0) { const f = (h0 - prev) / (cur - prev); rise = t - step + f * step; }
+    if (set === null && prev >= h0 && cur < h0) { const f = (h0 - prev) / (cur - prev); set = t - step + f * step; }
+    if (rise !== null && set !== null) break;
+    prev = cur;
+  }
+  const fmt = ms => ms === null ? '—' : new Date(ms).toLocaleTimeString('es-VE', { hour:'2-digit', minute:'2-digit' });
+  return { rise: fmt(rise), set: fmt(set) };
+}
+
+/* ============================================================
+   4. DIBUJO DE LA LUNA CON TEXTURA LOCAL
    ============================================================ */
 const canvas = document.getElementById('moonCanvas');
 const ctx = canvas.getContext('2d');
 const W = canvas.width, H = canvas.height;
 const CX = W / 2, CY = H / 2, R = W / 2 - 4;
 
-// Textura real (NASA / Solar System Scope) guardada en el repo como moon-texture.jpg
 const MOON_TEXTURE_URL = 'moon-texture.jpg';
-
 const moonImage = new Image();
 let textureLoaded = false;
 
@@ -202,93 +327,56 @@ moonImage.onload = () => {
 };
 moonImage.onerror = () => {
   document.getElementById('loadingMsg').textContent = 'textura local no encontrada';
-  drawMoonFallback(moonPhase());
 };
 moonImage.src = MOON_TEXTURE_URL;
 
 function drawMoon(phase) {
   ctx.clearRect(0, 0, W, H);
-
   const isWaxing = phase < 0.5;
   const halfPhase = isWaxing ? phase * 2 : (1 - phase) * 2;
 
-  // 1. Disco base con la fotografía real recortada al hemisferio visible
   ctx.save();
-  ctx.beginPath();
-  ctx.arc(CX, CY, R, 0, Math.PI * 2);
-  ctx.clip();
-
+  ctx.beginPath(); ctx.arc(CX, CY, R, 0, Math.PI * 2); ctx.clip();
+  
   if (textureLoaded) {
-    // La textura equirectangular es 2:1; la cara frontal es la franja central cuadrada
-    const sx = moonImage.width / 4;
-    const sw = moonImage.width / 2;
+    const sx = moonImage.width / 4, sw = moonImage.width / 2;
     ctx.drawImage(moonImage, sx, 0, sw, moonImage.height, 0, 0, W, H);
   } else {
     const grad = ctx.createRadialGradient(CX - R*0.3, CY - R*0.3, R*0.1, CX, CY, R);
-    grad.addColorStop(0, '#f0ead6');
-    grad.addColorStop(1, '#a89f85');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, W, H);
+    grad.addColorStop(0, '#f0ead6'); grad.addColorStop(1, '#a89f85');
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
   }
 
-  // 2. Capa de sombra según la fase (el terminador se mueve con la hora real)
   ctx.beginPath();
   const curve = Math.cos(halfPhase * Math.PI) * R;
   if (isWaxing) {
-    ctx.moveTo(CX, CY - R);
-    ctx.arc(CX, CY, R, -Math.PI/2, Math.PI/2, true);
+    ctx.moveTo(CX, CY - R); ctx.arc(CX, CY, R, -Math.PI/2, Math.PI/2, true);
     ctx.ellipse(CX, CY, Math.abs(curve), R, 0, Math.PI/2, -Math.PI/2, curve > 0 ? false : true);
   } else {
-    ctx.moveTo(CX, CY - R);
-    ctx.arc(CX, CY, R, Math.PI/2, -Math.PI/2, true);
+    ctx.moveTo(CX, CY - R); ctx.arc(CX, CY, R, Math.PI/2, -Math.PI/2, true);
     ctx.ellipse(CX, CY, Math.abs(curve), R, 0, -Math.PI/2, Math.PI/2, curve > 0 ? false : true);
   }
-  ctx.closePath();
-  ctx.fillStyle = 'rgba(8, 12, 25, 0.92)';
-  ctx.fill();
-
+  ctx.closePath(); ctx.fillStyle = 'rgba(8, 12, 25, 0.92)'; ctx.fill();
   ctx.restore();
 
-  // 3. Viñeta esférica para dar volumen 3D
-  const sphereShadow = ctx.createRadialGradient(CX - R*0.35, CY - R*0.35, R*0.1, CX, CY, R);
-  sphereShadow.addColorStop(0, 'rgba(255,255,255,0.08)');
-  sphereShadow.addColorStop(0.6, 'rgba(0,0,0,0)');
-  sphereShadow.addColorStop(1, 'rgba(0,0,0,0.55)');
-  ctx.beginPath();
-  ctx.arc(CX, CY, R, 0, Math.PI * 2);
-  ctx.fillStyle = sphereShadow;
-  ctx.fill();
+  const sh = ctx.createRadialGradient(CX - R*0.35, CY - R*0.35, R*0.1, CX, CY, R);
+  sh.addColorStop(0, 'rgba(255,255,255,0.08)'); sh.addColorStop(0.6, 'rgba(0,0,0,0)'); sh.addColorStop(1, 'rgba(0,0,0,0.55)');
+  ctx.beginPath(); ctx.arc(CX, CY, R, 0, Math.PI * 2); ctx.fillStyle = sh; ctx.fill();
 
-  // 4. Resplandor exterior
   const glow = ctx.createRadialGradient(CX, CY, R*0.95, CX, CY, R*1.4);
-  glow.addColorStop(0, 'rgba(200,220,255,0.12)');
-  glow.addColorStop(1, 'rgba(200,220,255,0)');
-  ctx.fillStyle = glow;
-  ctx.fillRect(0, 0, W, H);
+  glow.addColorStop(0, 'rgba(200,220,255,0.12)'); glow.addColorStop(1, 'rgba(200,220,255,0)');
+  ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
 }
 
-function drawMoonFallback(phase) {
-  ctx.clearRect(0, 0, W, H);
-  const grad = ctx.createRadialGradient(CX - R*0.3, CY - R*0.3, R*0.1, CX, CY, R);
-  grad.addColorStop(0, '#f0ead6');
-  grad.addColorStop(1, '#a89f85');
-  ctx.beginPath();
-  ctx.arc(CX, CY, R, 0, Math.PI * 2);
-  ctx.fillStyle = grad;
-  ctx.fill();
-}
+/* ============================================================
+   5. BUCLE DE ACTUALIZACIÓN
+   ============================================================ */
+let lastRiseCalc = 0;
 
 function updateAll() {
   const now = Date.now();
-  const age = moonAge(now);
-  const phase = moonPhase(now);
-  const illum = illumination(phase);
-  const name = phaseName(phase);
-  const tr = trend(phase);
-  const next = nextPhaseInfo(phase);
-  const dist = distanceKm(phase);
-  const cons = constellationForPhase(phase);
-  const tip = observationTip(phase);
+  const age = moonAge(now), phase = moonPhase(now), illum = illumination(phase);
+  const name = phaseName(phase), tr = trend(phase), next = nextPhaseInfo(phase);
 
   document.getElementById('phaseName').textContent = name;
   document.getElementById('illumTag').textContent = illum.toFixed(1) + '% iluminada · ' + tr;
@@ -297,12 +385,20 @@ function updateAll() {
   document.getElementById('next').textContent = next.name;
   document.getElementById('countdown').textContent = formatCountdown(next.days);
   document.getElementById('illum').textContent = illum.toFixed(1) + '%';
-  document.getElementById('dist').textContent = dist.toLocaleString('es') + ' km';
-  document.getElementById('constellation').textContent = cons;
-  document.getElementById('tip').textContent = tip;
+  document.getElementById('dist').textContent = distanceKm(phase).toLocaleString('es') + ' km';
+  document.getElementById('constellation').textContent = constellationForPhase(phase);
+  document.getElementById('tip').textContent = observationTip(phase);
 
   if (textureLoaded) drawMoon(phase);
   updateClock();
+  updateCalendars();
+
+  if (now - lastRiseCalc > 5 * 60000 || lastRiseCalc === 0) {
+    const rs = computeRiseSet();
+    document.getElementById('rise').textContent = rs.rise;
+    document.getElementById('set').textContent = rs.set;
+    lastRiseCalc = now;
+  }
 }
 
 updateAll();

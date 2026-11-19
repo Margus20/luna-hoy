@@ -40,10 +40,12 @@
   #moonWrap{position:relative; width:min(52vh,420px); aspect-ratio:1/1; border-radius:50%;
     background:#0a0f1e; box-shadow:0 0 70px rgba(140,180,255,.18), inset 0 0 40px rgba(0,0,0,.8);
     display:flex; align-items:center; justify-content:center; overflow:hidden}
-  #moonCanvas{width:100%; height:100%; display:block}
+  #moonCanvas{width:100%; height:100%; display:block; border-radius:50%}
   #clock{color:var(--muted); font-size:clamp(13px,1.9vw,17px); text-align:center}
 
-  footer{color:#5f7099; font-size:13px; text-align:center; padding:6px 0 14px}
+  footer{color:#7a8bb5; font-size:14px; text-align:center; padding:10px 0 18px; letter-spacing:.05em}
+  footer .heart{color:#ff6b8a; animation:pulse 1.5s ease-in-out infinite}
+  @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.25)}}
 
   @media (max-width:820px){
     main.grid{grid-template-columns:1fr 1fr}
@@ -87,18 +89,14 @@
     </aside>
   </main>
 
-  <footer>Paso 2 · motor astronómico activo. Calcula la fase real con matemáticas, sin internet.</footer>
+  <footer>Hecho con amor por <b>Margus20</b> <span class="heart">❤️</span></footer>
 </div>
 
 <script>
 /* ============================================================
    MOTOR ASTRONÓMICO DE FASE LUNAR
-   Basado en la época J2000 y el ciclo sinódico medio.
-   Funciona 100% offline, sin APIs externas.
    ============================================================ */
-
-const SYNODIC_MONTH = 29.530588853; // días del ciclo sinódico medio
-// Luna nueva de referencia: 6 de enero de 2000, 18:14 UTC (JD 2451550.1)
+const SYNODIC_MONTH = 29.530588853;
 const REF_NEW_MOON = Date.UTC(2000, 0, 6, 18, 14, 0);
 
 function moonAge(now = Date.now()) {
@@ -107,18 +105,10 @@ function moonAge(now = Date.now()) {
   if (age < 0) age += SYNODIC_MONTH;
   return age;
 }
-
-function moonPhase(now = Date.now()) {
-  return moonAge(now) / SYNODIC_MONTH; // 0 a 1
-}
-
-function illumination(phase) {
-  // 0% en luna nueva, 100% en luna llena
-  return (1 - Math.cos(2 * Math.PI * phase)) / 2 * 100;
-}
+function moonPhase(now = Date.now()) { return moonAge(now) / SYNODIC_MONTH; }
+function illumination(phase) { return (1 - Math.cos(2 * Math.PI * phase)) / 2 * 100; }
 
 function phaseName(phase) {
-  // 8 fases principales con sus rangos
   if (phase < 0.03125 || phase >= 0.96875) return "Luna Nueva";
   if (phase < 0.21875) return "Creciente Córnica";
   if (phase < 0.28125) return "Cuarto Creciente";
@@ -126,16 +116,13 @@ function phaseName(phase) {
   if (phase < 0.53125) return "Luna Llena";
   if (phase < 0.71875) return "Gibosa Menguante";
   if (phase < 0.78125) return "Cuarto Menguante";
-  if (phase < 0.96875) return "Menguante Córnica";
-  return "Luna Nueva";
+  return "Menguante Córnica";
 }
-
 function trend(phase) {
   if (phase < 0.5) return "Creciente 🌒";
   if (phase > 0.5) return "Menguante 🌖";
   return "Llena 🌕";
 }
-
 function nextPhaseInfo(phase) {
   const phases = [
     { name: "Luna Nueva", target: 0 },
@@ -143,20 +130,16 @@ function nextPhaseInfo(phase) {
     { name: "Luna Llena", target: 0.5 },
     { name: "Cuarto Menguante", target: 0.75 }
   ];
-  // buscar la siguiente fase
   for (const p of phases) {
     if (p.target > phase + 0.001) {
       const daysLeft = (p.target - phase) * SYNODIC_MONTH;
       return { name: p.name, days: daysLeft };
     }
   }
-  // si ya pasamos todas, la siguiente es Luna Nueva del próximo ciclo
   const daysLeft = (1 - phase) * SYNODIC_MONTH;
   return { name: "Luna Nueva", days: daysLeft };
 }
-
 function formatCountdown(days) {
-  const totalHours = days * 24;
   const d = Math.floor(days);
   const h = Math.floor((days - d) * 24);
   const m = Math.floor(((days - d) * 24 - h) * 60);
@@ -164,41 +147,26 @@ function formatCountdown(days) {
   if (h > 0) return `${h}h ${m}m`;
   return `${m}m`;
 }
-
 function distanceKm(phase) {
-  // distancia aproximada varía entre 356.500 y 406.700 km
-  // usamos una variación sinusoidal simple basada en anomalía media
   const anomaly = 2 * Math.PI * phase;
-  const meanDist = 384400;
-  const variation = 25100 * Math.cos(anomaly);
-  return Math.round(meanDist + variation);
+  return Math.round(384400 + 25100 * Math.cos(anomaly));
 }
-
 function constellationForPhase(phase) {
-  // aproximación: la Luna avanza ~13° por día por la eclíptica
-  // referencia: en luna nueva del 6/ene/2000 estaba en Capricornio
   const degrees = (phase * 360 + 280) % 360;
   const signs = [
-    { name: "Capricornio ♑", min: 270 },
-    { name: "Acuario ♒", min: 300 },
-    { name: "Piscis ♓", min: 330 },
-    { name: "Aries ♈", min: 0 },
-    { name: "Tauro ♉", min: 30 },
-    { name: "Géminis ♊", min: 60 },
-    { name: "Cáncer ♋", min: 90 },
-    { name: "Leo ♌", min: 120 },
-    { name: "Virgo ♍", min: 150 },
-    { name: "Libra ♎", min: 180 },
-    { name: "Escorpio ♏", min: 210 },
-    { name: "Sagitario ♐", min: 240 }
+    { name: "Capricornio ♑", min: 270 }, { name: "Acuario ♒", min: 300 },
+    { name: "Piscis ♓", min: 330 }, { name: "Aries ♈", min: 0 },
+    { name: "Tauro ♉", min: 30 }, { name: "Géminis ♊", min: 60 },
+    { name: "Cáncer ♋", min: 90 }, { name: "Leo ♌", min: 120 },
+    { name: "Virgo ♍", min: 150 }, { name: "Libra ♎", min: 180 },
+    { name: "Escorpio ♏", min: 210 }, { name: "Sagitario ♐", min: 240 }
   ];
   for (let i = signs.length - 1; i >= 0; i--) {
     if (degrees >= signs[i].min) return signs[i].name;
   }
   return signs[0].name;
 }
-
-function observationTip(phase, illum) {
+function observationTip(phase) {
   if (phase < 0.03 || phase > 0.97) return "Cielo oscuro ideal para estrellas y Vía Láctea.";
   if (phase < 0.25) return "Buen momento para ver cráteres cerca del terminador.";
   if (phase < 0.5) return "Cuarto creciente: sombras largas, gran detalle lunar.";
@@ -207,12 +175,161 @@ function observationTip(phase, illum) {
   if (phase < 0.78) return "Cuarto menguante: salida cerca de la medianoche.";
   return "Menguante: mejor observación antes del amanecer.";
 }
-
 function updateClock() {
   const now = new Date();
   const opts = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
                  hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
   document.getElementById('clock').textContent = 'hora local: ' + now.toLocaleDateString('es-VE', opts);
+}
+
+/* ============================================================
+   DIBUJO DE LA LUNA EN EL CANVAS
+   ============================================================ */
+const canvas = document.getElementById('moonCanvas');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+const CX = W / 2, CY = H / 2, R = W / 2 - 10;
+
+// Cráteres procedurales (posición normalizada x,y entre -1 y 1, radio normalizado)
+const craters = [
+  { x: -0.35, y: -0.25, r: 0.18, name: "Mare Imbrium" },
+  { x: 0.15, y: -0.30, r: 0.15, name: "Mare Serenitatis" },
+  { x: 0.40, y: -0.10, r: 0.12, name: "Mare Crisium" },
+  { x: -0.10, y: 0.10, r: 0.22, name: "Mare Tranquillitatis" },
+  { x: 0.25, y: 0.20, r: 0.14, name: "Mare Fecunditatis" },
+  { x: -0.40, y: 0.30, r: 0.16, name: "Mare Nubium" },
+  { x: 0.05, y: 0.35, r: 0.13, name: "Mare Nectaris" },
+  { x: -0.20, y: -0.50, r: 0.10, name: "Mare Frigoris" },
+  { x: 0.30, y: -0.45, r: 0.09, name: "Mare Humboldtianum" },
+  { x: -0.50, y: 0.05, r: 0.11, name: "Oceanus Procellarum" },
+  { x: 0.00, y: -0.05, r: 0.08, name: "Sinus Medii" },
+  { x: -0.15, y: 0.45, r: 0.07, name: "Mare Humorum" },
+  { x: 0.45, y: 0.40, r: 0.06, name: "Mare Australe" },
+  { x: -0.55, y: -0.35, r: 0.05, name: "Mare Insularum" },
+  { x: 0.20, y: 0.50, r: 0.05, name: "Mare Smythii" }
+];
+// Cráteres pequeños de impacto
+const smallCraters = [];
+for (let i = 0; i < 80; i++) {
+  const angle = Math.random() * Math.PI * 2;
+  const rad = Math.random() * 0.85;
+  smallCraters.push({
+    x: Math.cos(angle) * rad,
+    y: Math.sin(angle) * rad,
+    r: 0.01 + Math.random() * 0.03
+  });
+}
+
+function drawMoon(phase) {
+  ctx.clearRect(0, 0, W, H);
+  
+  // Fase: 0 = nueva, 0.5 = llena, 1 = nueva
+  // El terminador se mueve de derecha a izquierda en el hemisferio norte
+  // phase 0-0.5: creciente (iluminado a la derecha)
+  // phase 0.5-1: menguante (iluminado a la izquierda)
+  
+  const isWaxing = phase < 0.5;
+  const halfPhase = isWaxing ? phase * 2 : (1 - phase) * 2; // 0 a 1 dentro de cada mitad
+  // halfPhase: 0 = nueva, 1 = llena (dentro de la mitad actual)
+  
+  // 1. Fondo oscuro de la Luna (parte no iluminada)
+  ctx.beginPath();
+  ctx.arc(CX, CY, R, 0, Math.PI * 2);
+  ctx.fillStyle = '#1a1f2e';
+  ctx.fill();
+  
+  // 2. Dibujar cráteres en la parte oscura (tenues, luz cenicienta)
+  drawCraters(0.15);
+  
+  // 3. Parte iluminada
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(CX, CY, R, 0, Math.PI * 2);
+  ctx.clip();
+  
+  // La forma iluminada depende de la fase
+  // Usamos una elipse para el terminador
+  const terminatorX = CX + (isWaxing ? 1 : -1) * R * Math.cos(halfPhase * Math.PI);
+  
+  ctx.beginPath();
+  if (halfPhase < 0.5) {
+    // Menos de medio iluminado: forma de "C" o "D" delgada
+    if (isWaxing) {
+      ctx.arc(CX, CY, R, -Math.PI/2, Math.PI/2, false);
+      ctx.ellipse(CX, CY, R * Math.cos(halfPhase * Math.PI), R, 0, Math.PI/2, -Math.PI/2, true);
+    } else {
+      ctx.arc(CX, CY, R, Math.PI/2, -Math.PI/2, false);
+      ctx.ellipse(CX, CY, R * Math.cos(halfPhase * Math.PI), R, 0, -Math.PI/2, Math.PI/2, true);
+    }
+  } else {
+    // Más de medio iluminado
+    if (isWaxing) {
+      ctx.arc(CX, CY, R, -Math.PI/2, Math.PI/2, false);
+      ctx.ellipse(CX, CY, R * Math.abs(Math.cos(halfPhase * Math.PI)), R, 0, Math.PI/2, -Math.PI/2, false);
+    } else {
+      ctx.arc(CX, CY, R, Math.PI/2, -Math.PI/2, false);
+      ctx.ellipse(CX, CY, R * Math.abs(Math.cos(halfPhase * Math.PI)), R, 0, -Math.PI/2, Math.PI/2, false);
+    }
+  }
+  ctx.closePath();
+  
+  // Gradiente de iluminación (más brillante en el centro del lado iluminado)
+  const grad = ctx.createRadialGradient(
+    CX + (isWaxing ? R*0.3 : -R*0.3), CY, R*0.1,
+    CX, CY, R
+  );
+  grad.addColorStop(0, '#fffef5');
+  grad.addColorStop(0.5, '#f0ead6');
+  grad.addColorStop(1, '#d4c9a8');
+  ctx.fillStyle = grad;
+  ctx.fill();
+  
+  // 4. Cráteres en la parte iluminada (visibles)
+  drawCraters(0.6);
+  
+  ctx.restore();
+  
+  // 5. Borde suave y sombra exterior
+  ctx.beginPath();
+  ctx.arc(CX, CY, R, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(200,210,230,0.15)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  
+  // Resplandor exterior
+  const glow = ctx.createRadialGradient(CX, CY, R*0.9, CX, CY, R*1.3);
+  glow.addColorStop(0, 'rgba(200,220,255,0.08)');
+  glow.addColorStop(1, 'rgba(200,220,255,0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function drawCraters(opacity) {
+  // Mares lunares (manchas oscuras grandes)
+  craters.forEach(c => {
+    const px = CX + c.x * R;
+    const py = CY + c.y * R;
+    const pr = c.r * R;
+    ctx.beginPath();
+    ctx.arc(px, py, pr, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(80,85,100,${opacity * 0.5})`;
+    ctx.fill();
+  });
+  // Cráteres pequeños
+  smallCraters.forEach(c => {
+    const px = CX + c.x * R;
+    const py = CY + c.y * R;
+    const pr = c.r * R;
+    ctx.beginPath();
+    ctx.arc(px, py, pr, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(60,65,80,${opacity * 0.4})`;
+    ctx.fill();
+    // Borde del cráter (luz)
+    ctx.beginPath();
+    ctx.arc(px - pr*0.2, py - pr*0.2, pr*0.9, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(180,185,200,${opacity * 0.15})`;
+    ctx.fill();
+  });
 }
 
 function updateAll() {
@@ -225,7 +342,7 @@ function updateAll() {
   const next = nextPhaseInfo(phase);
   const dist = distanceKm(phase);
   const cons = constellationForPhase(phase);
-  const tip = observationTip(phase, illum);
+  const tip = observationTip(phase);
 
   document.getElementById('phaseName').textContent = name;
   document.getElementById('illumTag').textContent = illum.toFixed(1) + '% iluminada · ' + tr;
@@ -238,10 +355,10 @@ function updateAll() {
   document.getElementById('constellation').textContent = cons;
   document.getElementById('tip').textContent = tip;
 
+  drawMoon(phase);
   updateClock();
 }
 
-// actualizar cada segundo
 updateAll();
 setInterval(updateAll, 1000);
 </script>

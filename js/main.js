@@ -22,7 +22,12 @@ function phaseName(phase) {
   if (phase < 0.78125) return "Cuarto Menguante";
   return "Menguante Córnica";
 }
-function trend(phase) { return phase < 0.5 ? "Creciente 🌒" : (phase > 0.5 ? "Menguante 🌖" : "Llena 🌕"); }
+
+// CORRECCIÓN 2: Tolerancia para evitar contradicción en Luna Llena
+function trend(phase) { 
+  if (phase > 0.48 && phase < 0.52) return "Llena 🌕";
+  return phase < 0.5 ? "Creciente 🌒" : "Menguante 🌖"; 
+}
 
 function nextPhaseInfo(phase) {
   const phases = [{name:"Luna Nueva",t:0},{name:"Cuarto Creciente",t:0.25},{name:"Luna Llena",t:0.5},{name:"Cuarto Menguante",t:0.75}];
@@ -35,11 +40,13 @@ function formatCountdown(days) {
 }
 function distanceKm(phase) { return Math.round(384400 + 25100 * Math.cos(2 * Math.PI * phase)); }
 
-function constellationForPhase(phase) {
-  const degrees = (phase * 360 + 280) % 360;
-  const signs = [{name:"Capricornio ♑",min:270},{name:"Acuario ♒",min:300},{name:"Piscis ♓",min:330},{name:"Aries ♈",min:0},{name:"Tauro ♉",min:30},{name:"Géminis ♊",min:60},{name:"Cáncer ♋",min:90},{name:"Leo ♌",min:120},{name:"Virgo ♍",min:150},{name:"Libra ♎",min:180},{name:"Escorpio ♏",min:210},{name:"Sagitario ♐",min:240}];
-  for (let i = signs.length - 1; i >= 0; i--) if (degrees >= signs[i].min) return signs[i].name;
-  return signs[0].name;
+// CORRECCIÓN 3: Nueva función de constelación basada en longitud eclíptica real
+function constellationFromEcliptic(lam) {
+  const signs = [
+    "Aries ♈", "Tauro ♉", "Géminis ♊", "Cáncer ♋", "Leo ♌", "Virgo ♍",
+    "Libra ♎", "Escorpio ♏", "Sagitario ♐", "Capricornio ♑", "Acuario ♒", "Piscis ♓"
+  ];
+  return signs[Math.floor(lam / 30) % 12];
 }
 
 function observationTip(phase) {
@@ -190,6 +197,7 @@ const atan2 = (y, x) => { let a = Math.atan2(y, x) * R2D; return a < 0 ? a + 360
 
 function jdFromDate(ms) { return ms / 86400000 + 2440587.5; }
 
+// CORRECCIÓN 3: Añadido 'lam' al return
 function moonEcliptic(JD) {
   const T = (JD - 2451545.0) / 36525;
   const L0 = 218.3164477 + 481267.88123421*T - 0.0015786*T*T + T*T*T/538841;
@@ -202,7 +210,7 @@ function moonEcliptic(JD) {
   const eps = 23.439291 - 0.0130042*T;
   const ra = atan2( sin(lam)*cos(eps) - tan(bet)*sin(eps), cos(lam) );
   const dec = asin( sin(bet)*cos(eps) + cos(bet)*sin(eps)*sin(lam) );
-  return { ra, dec };
+  return { ra, dec, lam }; // Retornamos lam
 }
 
 function gmst(JD) {
@@ -259,14 +267,19 @@ moonImage.onerror = () => {
 };
 moonImage.src = MOON_TEXTURE_URL;
 
+// CORRECCIÓN 1: Lógica de sombra corregida
 function drawMoon(phase) {
   ctx.clearRect(0, 0, W, H);
   const isWaxing = phase < 0.5;
-  const halfPhase = isWaxing ? phase * 2 : (1 - phase) * 2;
+  
+  const angle = phase * 2 * Math.PI;
+  const cosAngle = Math.cos(angle);
+  const ellipseRadius = Math.abs(cosAngle) * R;
 
   ctx.save();
   ctx.beginPath(); ctx.arc(CX, CY, R, 0, Math.PI * 2); ctx.clip();
   
+  // 1. Dibujamos la luna llena (textura o gradiente)
   if (textureLoaded) {
     const sx = moonImage.width / 4, sw = moonImage.width / 2;
     ctx.drawImage(moonImage, sx, 0, sw, moonImage.height, 0, 0, W, H);
@@ -276,24 +289,34 @@ function drawMoon(phase) {
     ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
   }
 
+  // 2. Dibujamos la sombra encima
   ctx.beginPath();
-  const curve = Math.cos(halfPhase * Math.PI) * R;
   if (isWaxing) {
-    ctx.moveTo(CX, CY - R); ctx.arc(CX, CY, R, -Math.PI/2, Math.PI/2, true);
-    ctx.ellipse(CX, CY, Math.abs(curve), R, 0, Math.PI/2, -Math.PI/2, curve > 0 ? false : true);
+    // Sombra a la izquierda
+    ctx.moveTo(CX, CY - R);
+    ctx.arc(CX, CY, R, -Math.PI/2, Math.PI/2, true);
+    ctx.ellipse(CX, CY, ellipseRadius, R, 0, Math.PI/2, -Math.PI/2, cosAngle > 0 ? false : true);
   } else {
-    ctx.moveTo(CX, CY - R); ctx.arc(CX, CY, R, Math.PI/2, -Math.PI/2, true);
-    ctx.ellipse(CX, CY, Math.abs(curve), R, 0, -Math.PI/2, Math.PI/2, curve > 0 ? false : true);
+    // Sombra a la derecha
+    ctx.moveTo(CX, CY - R);
+    ctx.arc(CX, CY, R, -Math.PI/2, Math.PI/2, false);
+    ctx.ellipse(CX, CY, ellipseRadius, R, 0, Math.PI/2, -Math.PI/2, cosAngle > 0 ? true : false);
   }
-  ctx.closePath(); ctx.fillStyle = 'rgba(8, 12, 25, 0.92)'; ctx.fill();
+  ctx.closePath(); 
+  ctx.fillStyle = 'rgba(8, 12, 25, 0.92)'; 
+  ctx.fill();
   ctx.restore();
 
+  // 3. Efectos de iluminación
   const sh = ctx.createRadialGradient(CX - R*0.35, CY - R*0.35, R*0.1, CX, CY, R);
-  sh.addColorStop(0, 'rgba(255,255,255,0.08)'); sh.addColorStop(0.6, 'rgba(0,0,0,0)'); sh.addColorStop(1, 'rgba(0,0,0,0.55)');
+  sh.addColorStop(0, 'rgba(255,255,255,0.08)'); 
+  sh.addColorStop(0.6, 'rgba(0,0,0,0)'); 
+  sh.addColorStop(1, 'rgba(0,0,0,0.55)');
   ctx.beginPath(); ctx.arc(CX, CY, R, 0, Math.PI * 2); ctx.fillStyle = sh; ctx.fill();
 
   const glow = ctx.createRadialGradient(CX, CY, R*0.95, CX, CY, R*1.4);
-  glow.addColorStop(0, 'rgba(200,220,255,0.12)'); glow.addColorStop(1, 'rgba(200,220,255,0)');
+  glow.addColorStop(0, 'rgba(200,220,255,0.12)'); 
+  glow.addColorStop(1, 'rgba(200,220,255,0)');
   ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
 }
 
@@ -307,6 +330,11 @@ function updateAll() {
   const age = moonAge(now), phase = moonPhase(now), illum = illumination(phase);
   const name = phaseName(phase), tr = trend(phase), next = nextPhaseInfo(phase);
 
+  // Calculamos la posición real para la constelación
+  const JD = jdFromDate(now);
+  const { lam } = moonEcliptic(JD);
+  const constellation = constellationFromEcliptic(lam);
+
   document.getElementById('phaseName').textContent = name;
   document.getElementById('illumTag').textContent = illum.toFixed(1) + '% iluminada · ' + tr;
   document.getElementById('age').textContent = age.toFixed(2) + ' días';
@@ -315,7 +343,7 @@ function updateAll() {
   document.getElementById('countdown').textContent = formatCountdown(next.days);
   document.getElementById('illum').textContent = illum.toFixed(1) + '%';
   document.getElementById('dist').textContent = distanceKm(phase).toLocaleString('es') + ' km';
-  document.getElementById('constellation').textContent = constellationForPhase(phase);
+  document.getElementById('constellation').textContent = constellation;
   document.getElementById('tip').textContent = observationTip(phase);
 
   if (textureLoaded) drawMoon(phase);

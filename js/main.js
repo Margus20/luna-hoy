@@ -23,7 +23,7 @@ function phaseName(phase) {
   return "Menguante Córnica";
 }
 
-// CORRECCIÓN 2: Tolerancia para evitar contradicción en Luna Llena
+// Tolerancia para evitar contradicción en Luna Llena
 function trend(phase) { 
   if (phase > 0.48 && phase < 0.52) return "Llena 🌕";
   return phase < 0.5 ? "Creciente 🌒" : "Menguante 🌖"; 
@@ -40,7 +40,7 @@ function formatCountdown(days) {
 }
 function distanceKm(phase) { return Math.round(384400 + 25100 * Math.cos(2 * Math.PI * phase)); }
 
-// CORRECCIÓN 3: Nueva función de constelación basada en longitud eclíptica real
+// Nueva función de constelación basada en longitud eclíptica real
 function constellationFromEcliptic(lam) {
   const signs = [
     "Aries ♈", "Tauro ♉", "Géminis ♊", "Cáncer ♋", "Leo ♌", "Virgo ♍",
@@ -197,7 +197,6 @@ const atan2 = (y, x) => { let a = Math.atan2(y, x) * R2D; return a < 0 ? a + 360
 
 function jdFromDate(ms) { return ms / 86400000 + 2440587.5; }
 
-// CORRECCIÓN 3: Añadido 'lam' al return
 function moonEcliptic(JD) {
   const T = (JD - 2451545.0) / 36525;
   const L0 = 218.3164477 + 481267.88123421*T - 0.0015786*T*T + T*T*T/538841;
@@ -210,7 +209,7 @@ function moonEcliptic(JD) {
   const eps = 23.439291 - 0.0130042*T;
   const ra = atan2( sin(lam)*cos(eps) - tan(bet)*sin(eps), cos(lam) );
   const dec = asin( sin(bet)*cos(eps) + cos(bet)*sin(eps)*sin(lam) );
-  return { ra, dec, lam }; // Retornamos lam
+  return { ra, dec, lam }; // Retornamos lam para la constelación
 }
 
 function gmst(JD) {
@@ -267,57 +266,83 @@ moonImage.onerror = () => {
 };
 moonImage.src = MOON_TEXTURE_URL;
 
-// CORRECCIÓN 1: Lógica de sombra corregida
 function drawMoon(phase) {
   ctx.clearRect(0, 0, W, H);
   const isWaxing = phase < 0.5;
   
-  const angle = phase * 2 * Math.PI;
-  const cosAngle = Math.cos(angle);
-  const ellipseRadius = Math.abs(cosAngle) * R;
-
-  ctx.save();
-  ctx.beginPath(); ctx.arc(CX, CY, R, 0, Math.PI * 2); ctx.clip();
+  // 1. Dibujar el fondo oscuro de la luna (la cara oculta)
+  ctx.beginPath();
+  ctx.arc(CX, CY, R, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(18, 22, 35, 0.95)'; 
+  ctx.fill();
   
-  // 1. Dibujamos la luna llena (textura o gradiente)
+  ctx.save();
+  ctx.beginPath();
+  
+  // 2. Definir la forma de la parte iluminada para recortarla
+  if (isWaxing) {
+    // Luna creciente: parte iluminada a la derecha
+    ctx.arc(CX, CY, R, -Math.PI/2, Math.PI/2, false); // Borde derecho
+    
+    const angle = phase * 2 * Math.PI;
+    const rx = Math.abs(R * Math.cos(angle));
+    
+    if (phase < 0.25) {
+      // Cuarto creciente: el terminador se curva a la derecha
+      ctx.ellipse(CX, CY, rx, R, 0, Math.PI/2, -Math.PI/2, true);
+    } else {
+      // Gibosa creciente: el terminador se curva a la izquierda
+      ctx.ellipse(CX, CY, rx, R, 0, Math.PI/2, -Math.PI/2, false);
+    }
+  } else {
+    // Luna menguante: parte iluminada a la izquierda
+    ctx.arc(CX, CY, R, -Math.PI/2, Math.PI/2, true); // Borde izquierdo
+    
+    const angle = (1 - phase) * 2 * Math.PI;
+    const rx = Math.abs(R * Math.cos(angle));
+    
+    if (phase > 0.75) {
+      // Menguante a nueva: el terminador se curva a la izquierda
+      ctx.ellipse(CX, CY, rx, R, 0, Math.PI/2, -Math.PI/2, false);
+    } else {
+      // Gibosa menguante: el terminador se curva a la derecha
+      ctx.ellipse(CX, CY, rx, R, 0, Math.PI/2, -Math.PI/2, true);
+    }
+  }
+  
+  ctx.closePath();
+  ctx.clip();
+  
+  // 3. Dibujar la textura o degradado SOLO en la parte iluminada
   if (textureLoaded) {
     const sx = moonImage.width / 4, sw = moonImage.width / 2;
     ctx.drawImage(moonImage, sx, 0, sw, moonImage.height, 0, 0, W, H);
   } else {
     const grad = ctx.createRadialGradient(CX - R*0.3, CY - R*0.3, R*0.1, CX, CY, R);
-    grad.addColorStop(0, '#f0ead6'); grad.addColorStop(1, '#a89f85');
-    ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+    grad.addColorStop(0, '#f0ead6'); 
+    grad.addColorStop(1, '#a89f85');
+    ctx.fillStyle = grad; 
+    ctx.fillRect(0, 0, W, H);
   }
-
-  // 2. Dibujamos la sombra encima
-  ctx.beginPath();
-  if (isWaxing) {
-    // Sombra a la izquierda
-    ctx.moveTo(CX, CY - R);
-    ctx.arc(CX, CY, R, -Math.PI/2, Math.PI/2, true);
-    ctx.ellipse(CX, CY, ellipseRadius, R, 0, Math.PI/2, -Math.PI/2, cosAngle > 0 ? false : true);
-  } else {
-    // Sombra a la derecha
-    ctx.moveTo(CX, CY - R);
-    ctx.arc(CX, CY, R, -Math.PI/2, Math.PI/2, false);
-    ctx.ellipse(CX, CY, ellipseRadius, R, 0, Math.PI/2, -Math.PI/2, cosAngle > 0 ? true : false);
-  }
-  ctx.closePath(); 
-  ctx.fillStyle = 'rgba(8, 12, 25, 0.92)'; 
-  ctx.fill();
+  
   ctx.restore();
-
-  // 3. Efectos de iluminación
+  
+  // 4. Efecto de sombreado 3D (aplicado a toda la luna para darle volumen)
   const sh = ctx.createRadialGradient(CX - R*0.35, CY - R*0.35, R*0.1, CX, CY, R);
   sh.addColorStop(0, 'rgba(255,255,255,0.08)'); 
   sh.addColorStop(0.6, 'rgba(0,0,0,0)'); 
   sh.addColorStop(1, 'rgba(0,0,0,0.55)');
-  ctx.beginPath(); ctx.arc(CX, CY, R, 0, Math.PI * 2); ctx.fillStyle = sh; ctx.fill();
-
+  ctx.beginPath(); 
+  ctx.arc(CX, CY, R, 0, Math.PI * 2); 
+  ctx.fillStyle = sh; 
+  ctx.fill();
+  
+  // 5. Resplandor exterior (Glow)
   const glow = ctx.createRadialGradient(CX, CY, R*0.95, CX, CY, R*1.4);
   glow.addColorStop(0, 'rgba(200,220,255,0.12)'); 
   glow.addColorStop(1, 'rgba(200,220,255,0)');
-  ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = glow; 
+  ctx.fillRect(0, 0, W, H);
 }
 
 /* ============================================================
@@ -330,7 +355,7 @@ function updateAll() {
   const age = moonAge(now), phase = moonPhase(now), illum = illumination(phase);
   const name = phaseName(phase), tr = trend(phase), next = nextPhaseInfo(phase);
 
-  // Calculamos la posición real para la constelación
+  // Cálculo real para la constelación
   const JD = jdFromDate(now);
   const { lam } = moonEcliptic(JD);
   const constellation = constellationFromEcliptic(lam);
